@@ -159,3 +159,4 @@ def lstm(n_features=4,
 
 if __name__=='__main__':
     lstm(n_features=4, n_timesteps=80, n_train=60, n_window=15, n_units=100, n_epochs=50, n_gap=1)
+    # test
