@@ -297,6 +297,7 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     # drop rows with NaN values
     if dropnan:
         agg.dropna(inplace=True)
+    print('agg = {}'.format(agg))
     return agg.values
 # split a univariate dataset into train/test sets
 def train_test_split(data, n_test):
@@ -352,7 +353,7 @@ def xgboost_forecast(train, testX):
     yhat = model.predict(np.asarray([testX]))
     return yhat[0]
 
-def randomforest(n_test=20):
+def randomforest(n_test=20, n_features=4, n_gap=1):
     mse = 0
     for i in range(len(address)):
         print(i)
@@ -366,10 +367,18 @@ def randomforest(n_test=20):
         # evaluate
         mse_, y, yhat = walk_forward_validation(data, n_test, methods='randomforest')
         mse = mse+mse_
+        # save predictions
+        data2save = {}
+        data2save['original'] = y
+        data2save['prediction'] = yhat
+        if not os.path.exists('./data/randomforest_{}_{}'.format(n_features, n_gap)):
+            os.makedirs('./data/randomforest_{}_{}'.format(n_features, n_gap))
+        df2save = pd.DataFrame(data2save)
+        df2save.to_csv('./data/randomforest_{}_{}/{}_randomforest.csv'.format(n_features, n_gap, address[i]), index=False)
     rmse = np.sqrt(mse / len(address))
     print('randomforest, rmse: {}'.format(rmse))
 
-def xgboost(n_test=20):
+def xgboost(n_test=20, n_features=4, n_gap=1):
     mse = 0
     for i in range(len(address)):
         print(i)
@@ -382,7 +391,16 @@ def xgboost(n_test=20):
         data = series_to_supervised(values, n_in=6)
         # evaluate
         mse_, y, yhat = walk_forward_validation(data, n_test, methods='xgboost')
-        mse = mse+mse_
+        mse = mse + mse_
+        # save predictions
+        data2save = {}
+        data2save['original'] = y
+        data2save['prediction'] = yhat
+
+        df2save = pd.DataFrame(data2save)
+        if not os.path.exists('./data/xgboost_{}_{}'.format(n_features, n_gap)):
+            os.makedirs('./data/xgboost_{}_{}'.format(n_features, n_gap))
+        df2save.to_csv('./data/xgboost_{}_{}/{}_xgboost.csv'.format(n_features, n_gap, address[i]), index=False)
     rmse = np.sqrt(mse / len(address))
     print('xgboost, rmse: {}'.format(rmse))
 
@@ -407,20 +425,31 @@ def plot_curve(n_gap=1, n_features=4, n_train=60, n_timestamp=80):
         # la = original[0:n_train]+la
         # ha = original[0:n_train]+ha
 
-        file3 = open('./data/LSTM_{}_{}/prediction_LSTM.csv'.format(n_features, n_gap, address[i]))
+        file3 = open('./data/xgboost_{}_{}/{}_xgboost.csv'.format(n_features, n_gap, address[i]))
         df3 = pd.read_csv(file3)
-        lstm_ = df3['prediction'].values.tolist()
+        xgboost_ = df3['prediction'].values.tolist()
+
+        file4 = open('./data/randomforest_{}_{}/{}_randomforest.csv'.format(n_features, n_gap, address[i]))
+        df4 = pd.read_csv(file4)
+        randomforest_ = df4['prediction'].values.tolist()
+
+        file5 = open('./data/LSTM_{}_{}/prediction_LSTM.csv'.format(n_features, n_gap, address[i]))
+        df5 = pd.read_csv(file5)
+        lstm_ = df5['prediction'].values.tolist()
         lstm_ = lstm_[i*n_test: i*n_test+n_test]
         # lstm_ = original[0:n_train]+lstm_
 
         plt.figure()
         plt.plot(x, original)
-        plt.plot(range(n_train, n_timestamp), la)
-        plt.plot(range(n_train, n_timestamp), ha)
+        # plt.plot(range(n_train, n_timestamp), la)
+        # plt.plot(range(n_train, n_timestamp), ha)
+        plt.plot(range(n_train, n_timestamp), xgboost_)
+        plt.plot(range(n_train, n_timestamp), randomforest_)
         plt.plot(range(n_train, n_timestamp), lstm_)
         plt.xlabel('time')
         plt.ylabel('transaction value')
-        plt.legend(('original', 'LA', 'HA', 'GRU'))
+        # plt.legend(('original', 'LA', 'HA', 'xgboost', 'randomforest', 'GRU'))
+        plt.legend(('original', 'xgboost', 'randomforest', 'GRU'))
         plt.title(address[i])
         plt.show()
 
@@ -440,14 +469,16 @@ if __name__=='__main__':
     # xgboost()
     # randomforest()
 
-    arima_rmse = []
-    for p in range(1,4):
-        for d in range(1,2):
-            for q in range(1,4):
-                rmse = arima(p=p,d=d,q=q)
-                s = 'p={}, d={}, q={}, rmse={}'.format(p,d,q,rmse)
-                arima_rmse.append(s)
-    for i in range(len(arima_rmse)):
-        print(arima_rmse[i])
-    # plot_curve()
+    # arima_rmse = []
+    # for p in range(1,4):
+    #     for d in range(1,2):
+    #         for q in range(1,4):
+    #             rmse = arima(p=p,d=d,q=q)
+    #             s = 'pqd, p={}, d={}, q={}, rmse={}'.format(p,d,q,rmse)
+    #             arima_rmse.append(s)
+    # for i in range(len(arima_rmse)):
+    #     print(arima_rmse[i])
+
+
+    plot_curve()
 
