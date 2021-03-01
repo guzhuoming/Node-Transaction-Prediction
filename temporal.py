@@ -11,6 +11,9 @@ import keras.backend as K
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib import pyplot as plt
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.metrics import r2_score
 from statsmodels.tsa.arima_model import ARIMA
 from sklearn.metrics import mean_absolute_error
 from sklearn.ensemble import RandomForestRegressor
@@ -47,10 +50,10 @@ class attention(Layer):
 def lstm(n_features=4,
          n_train=60,
          n_window=5,
-         n_units=100,
-         n_epochs=50,
+         n_units=64,
+         n_epochs=10,
          with_att=False,
-         methods='lstm',
+         methods='gru',
          lr=0.001,
          n_gap = 1,
          feature_n = 1
@@ -183,8 +186,14 @@ def lstm(n_features=4,
     if not os.path.exists('./data/LSTM_{}_{}'.format(n_features, n_gap)):
         os.makedirs('./data/LSTM_{}_{}'.format(n_features, n_gap))
     df.to_csv('./data/LSTM_{}_{}/prediction_LSTM.csv'.format(n_features, n_gap), index=False)
-    rmse = sqrt(mean_squared_error(inv_yhat[:, -n_test:, feature_n], data[:, -n_test:, feature_n]))
+    rmse = sqrt(mean_squared_error(df['original'].values, df['prediction'].values))
+    mae = mean_absolute_error(df['original'].values, df['prediction'].values)
+    mape = mean_absolute_percentage_error(df['original'].values, df['prediction'].values)
+    r2 = r2_score(df['original'].values, df['prediction'].values)
     print('rmse: {}'.format(rmse))
+    print('mae: {}'.format(mae))
+    print('mape: {}'.format(mape))
+    print('r2: {}'.format(r2))
     return rmse
 
 def la_ha(n_train=60,
@@ -202,9 +211,10 @@ def la_ha(n_train=60,
         for j in range(n_timestamp-n_train):
             csvwriter.writerow([j+n_train, 0., 0., 0., 0., 0.])
         f.close()
+    real_transum = np.array([])
+    predict_transum_ha = np.array([])
+    predict_transum_la = np.array([])
 
-    mse_la = 0
-    mse_ha = 0
     for i in range(len(address)):
         f1 = open('./data/feature_{}_{}/{}_ft.csv'.format(n_features, n_gap, address[i]))
         df_node_pair = pd.read_csv(f1)
@@ -236,19 +246,31 @@ def la_ha(n_train=60,
                                                     df_prediction['tran_sum_real'][j - n_train]
             df_prediction['difference_la'][j - n_train] = df_prediction['tran_sum_la'][j - n_train] - \
                                                     df_prediction['tran_sum_real'][j - n_train]
-
-            # calculate mse in the loop, accumulate it outside the loop
-            mse_ha = mse_ha + math.pow(df_prediction['difference_ha'][j - n_train], 2)
-            mse_la = mse_la + math.pow(df_prediction['difference_la'][j - n_train], 2)
-
+        real_transum = np.append(real_transum, df_prediction['tran_sum_real'].values)
+        predict_transum_ha = np.append(predict_transum_ha, df_prediction['tran_sum_ha'].values)
+        predict_transum_la = np.append(predict_transum_la, df_prediction['tran_sum_la'].values)
         df_prediction.to_csv('./data/LA_HA_{}_{}/{}_LA_HA.csv'.format(n_features, n_gap, address[i]),index=False)
-    rmse_ha = math.sqrt(mse_ha / (len(address) * (n_timestamp-n_train)))
-    rmse_la = math.sqrt(mse_la / (len(address) * (n_timestamp-n_train)))
+
+    rmse_ha = mean_squared_error(real_transum, predict_transum_ha, squared=False)
+    mae_ha = mean_absolute_error(real_transum, predict_transum_ha)
+    mape_ha = mean_absolute_percentage_error(real_transum, predict_transum_ha)
+    r2_ha = r2_score(real_transum, predict_transum_ha)
+
+    rmse_la = mean_squared_error(real_transum, predict_transum_la, squared=False)
+    mae_la = mean_absolute_error(real_transum, predict_transum_la)
+    mape_la = mean_absolute_percentage_error(real_transum, predict_transum_la)
+    r2_la = r2_score(real_transum, predict_transum_la)
     print('rmse_ha:{}, rmse_la:{}'.format(rmse_ha, rmse_la))
-    return rmse_ha, rmse_la
+    print('mae_ha:{}, mae_la:{}'.format(mae_ha, mae_la))
+    print('mape_ha:{}, mape_la:{}'.format(mape_ha, mape_la))
+    print('r2_ha:{}, r2_la:{}'.format(r2_ha, r2_la))
+    return rmse_ha, rmse_la, mae_ha, mae_la, mape_ha, mape_la, r2_ha, r2_la
 
 def arima(n_train=60, p=2, d=1, q=2):
     mse = 0
+    mae = 0
+    mape = 0
+    r_2_score = 0
     error = 0
     for i in range(len(address)):
         print(i)
@@ -272,14 +294,23 @@ def arima(n_train=60, p=2, d=1, q=2):
                 history.append(test[t])
             print('pred_>=0:{}'.format(pred))
             mse = mse + mean_squared_error(test, pred)
+            mae = mae + mean_absolute_error(test, pred)
+            mape = mape + mean_absolute_percentage_error(test, pred)
+            r_2_score = r_2_score + r2_score(test, pred)
             print(mse)
         except:
                 error = error+1
                 continue
 
     rmse = np.sqrt(mse/(len(address)-error))
+    mae = mae/(len(address)-error)
+    mape = mape / (len(address) - error)
+    r_2_score = r_2_score / (len(address) - error)
     print('errornum:{}'.format(error))
     print('arima, rmse: {}'.format(rmse))
+    print('arima, mae: {}'.format(mae))
+    print('arima, mape: {}'.format(mape))
+    print('arima, r_2_score: {}'.format(r_2_score))
     return rmse
 
 def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
@@ -339,8 +370,11 @@ def walk_forward_validation(data, n_test, methods='randomforest'):
         # summarize progress
         # print('>expected=%.1f, predicted=%.1f' % (testy, yhat))
     # estimate prediction error
-    error = mean_squared_error(test[:, -1], predictions)
-    return error, test[:, -1], predictions
+    mse = mean_squared_error(test[:, -1], predictions)
+    mae = mean_absolute_error(test[:, -1], predictions)
+    mape = mean_absolute_percentage_error(test[:, -1], predictions)
+    r_2_score = r2_score(test[:, -1], predictions)
+    return mse, mae, mape, r_2_score, test[:, -1], predictions
 def xgboost_forecast(train, testX):
     # transform list into array
     train = np.asarray(train)
@@ -355,6 +389,9 @@ def xgboost_forecast(train, testX):
 
 def randomforest(n_test=20, n_features=4, n_gap=1):
     mse = 0
+    mae = 0
+    mape = 0
+    r_2_score = 0
     for i in range(len(address)):
         print(i)
         f = open('./data/feature_4_1/{}_ft.csv'.format(address[i]))
@@ -365,8 +402,11 @@ def randomforest(n_test=20, n_features=4, n_gap=1):
         # transform the time series data into supervised learning
         data = series_to_supervised(values, n_in=6)
         # evaluate
-        mse_, y, yhat = walk_forward_validation(data, n_test, methods='randomforest')
+        mse_, mae_, mape_, r_2_score_, y, yhat = walk_forward_validation(data, n_test, methods='randomforest')
         mse = mse+mse_
+        mae = mae+mae_
+        mape = mape+mape_
+        r_2_score = r_2_score+r_2_score_
         # save predictions
         data2save = {}
         data2save['original'] = y
@@ -376,10 +416,19 @@ def randomforest(n_test=20, n_features=4, n_gap=1):
         df2save = pd.DataFrame(data2save)
         df2save.to_csv('./data/randomforest_{}_{}/{}_randomforest.csv'.format(n_features, n_gap, address[i]), index=False)
     rmse = np.sqrt(mse / len(address))
+    mae = mae/len(address)
+    mape = mape/len(address)
+    r_2_score = r_2_score/len(address)
     print('randomforest, rmse: {}'.format(rmse))
+    print('randomforest, mae: {}'.format(mae))
+    print('randomforest, mape: {}'.format(mape))
+    print('randomforest, r_2_score: {}'.format(r_2_score))
 
 def xgboost(n_test=20, n_features=4, n_gap=1):
     mse = 0
+    mae = 0
+    mape = 0
+    r_2_score = 0
     for i in range(len(address)):
         print(i)
         f = open('./data/feature_4_1/{}_ft.csv'.format(address[i]))
@@ -390,8 +439,11 @@ def xgboost(n_test=20, n_features=4, n_gap=1):
         # transform the time series data into supervised learning
         data = series_to_supervised(values, n_in=6)
         # evaluate
-        mse_, y, yhat = walk_forward_validation(data, n_test, methods='xgboost')
+        mse_, mae_, mape_, r_2_score_, y, yhat = walk_forward_validation(data, n_test, methods='xgboost')
         mse = mse + mse_
+        mae = mae + mae_
+        mape = mape + mape_
+        r_2_score = r_2_score + r_2_score_
         # save predictions
         data2save = {}
         data2save['original'] = y
@@ -402,7 +454,13 @@ def xgboost(n_test=20, n_features=4, n_gap=1):
             os.makedirs('./data/xgboost_{}_{}'.format(n_features, n_gap))
         df2save.to_csv('./data/xgboost_{}_{}/{}_xgboost.csv'.format(n_features, n_gap, address[i]), index=False)
     rmse = np.sqrt(mse / len(address))
+    mae = mae / len(address)
+    mape = mape / len(address)
+    r_2_score = r_2_score / len(address)
     print('xgboost, rmse: {}'.format(rmse))
+    print('xgboost, mae: {}'.format(mae))
+    print('xgboost, mape: {}'.format(mape))
+    print('xgboost, r_2_score: {}'.format(r_2_score))
 
 def plot_curve(n_gap=1, n_features=4, n_train=60, n_timestamp=80):
     """
@@ -480,5 +538,9 @@ if __name__=='__main__':
     #     print(arima_rmse[i])
 
 
-    plot_curve()
-
+    # plot_curve()
+    # arima(p=1,d=0,q=0)
+    # xgboost()
+    # randomforest()
+    # la_ha()
+    lstm()
