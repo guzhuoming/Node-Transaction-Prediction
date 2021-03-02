@@ -15,6 +15,8 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import mean_absolute_percentage_error
 from sklearn.metrics import r2_score
 from statsmodels.tsa.arima_model import ARIMA
+from statsmodels.tsa.vector_ar.var_model import VAR
+from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
@@ -49,11 +51,11 @@ class attention(Layer):
 
 def lstm(n_features=4,
          n_train=60,
-         n_window=5,
+         n_window=10,
          n_units=64,
          n_epochs=10,
          with_att=False,
-         methods='gru',
+         methods='lstm',
          lr=0.001,
          n_gap = 1,
          feature_n = 1
@@ -194,7 +196,7 @@ def lstm(n_features=4,
     print('mae: {}'.format(mae))
     print('mape: {}'.format(mape))
     print('r2: {}'.format(r2))
-    return rmse
+    return rmse, mae, mape, r2
 
 def la_ha(n_train=60,
           n_features=4,
@@ -386,7 +388,6 @@ def xgboost_forecast(train, testX):
     # make a one-step prediction
     yhat = model.predict(np.asarray([testX]))
     return yhat[0]
-
 def randomforest(n_test=20, n_features=4, n_gap=1):
     mse = 0
     mae = 0
@@ -462,6 +463,88 @@ def xgboost(n_test=20, n_features=4, n_gap=1):
     print('xgboost, mape: {}'.format(mape))
     print('xgboost, r_2_score: {}'.format(r_2_score))
 
+def preprocess_data_svr(values, train_size=60, time_len=80, seq_len=6, pre_len=1):
+    """
+
+    :param values:
+    :param train_size:
+    :param time_len:
+    :param seq_len:
+    :param pre_len:
+    :return:
+    """
+    train_data = values[0:train_size]
+    test_data = values[train_size-seq_len:time_len]
+
+    trainX, trainY, testX, testY = [], [], [], []
+    for i in range(len(train_data) - seq_len):
+        a = train_data[i: i + seq_len + pre_len]
+        trainX.append(a[0: seq_len])
+        trainY.append(a[seq_len: seq_len + pre_len])
+    for i in range(len(test_data) - seq_len):
+        b = test_data[i: i + seq_len + pre_len]
+        testX.append(b[0: seq_len])
+        testY.append(b[seq_len: seq_len + pre_len])
+    return trainX, trainY, testX, testY
+
+def svr(n_train=60, n_test=20, n_window=6):
+    """
+
+    :param n_train:
+    :param n_test:
+    :param n_window:
+    :return:
+    refer to https://github.com/lehaifeng/T-GCN/blob/master/Baselines/baselines.py
+    """
+    train_size=n_train
+    time_len=n_train+n_test
+    seq_len=n_window
+    pre_len=1
+
+    real_transum, predict_transum = np.array([]), np.array([])
+
+    for i in range(len(address)):
+        print(i)
+        f = open('./data/feature_4_1/{}_ft.csv'.format(address[i]))
+        df = pd.read_csv(f)
+
+        # load the dataset
+        values = df['tran_sum'].values
+
+        # read data
+        preprocess_data_svr(values=values)
+        a_X, a_Y, t_X, t_Y = preprocess_data_svr(values, train_size, time_len, seq_len, pre_len)
+        a_X = np.array(a_X)
+        a_X = np.reshape(a_X, [-1, seq_len])
+        a_Y = np.array(a_Y)
+        a_Y = np.reshape(a_Y, [-1, pre_len])
+        a_Y = np.mean(a_Y, axis=1)
+        t_X = np.array(t_X)
+        t_X = np.reshape(t_X, [-1, seq_len])
+        t_Y = np.array(t_Y)
+        t_Y = np.reshape(t_Y, [-1, pre_len])
+        print('ax.shape={}'.format(a_X.shape))
+        print('ay.shape={}'.format(a_Y.shape))
+        print('tx.shape={}'.format(t_X.shape))
+        print('ty.shape={}'.format(t_Y.shape))
+
+        svr_model = SVR(kernel='linear')
+        svr_model.fit(a_X, a_Y)
+        pre = svr_model.predict(t_X)
+
+        real_transum = np.append(real_transum, values[train_size:time_len])
+        predict_transum = np.append(predict_transum, pre)
+    rmse, mae, mape, r2 = evaluation(real_transum, predict_transum)
+    print('svr:')
+    print('rmse={}\nmae={}\nmape={}\nr2={}'.format(rmse, mae, mape, r2))
+
+def evaluation(real, pre):
+    rmse = mean_squared_error(real, pre, squared=False)
+    mae = mean_absolute_error(real, pre)
+    mape = mean_absolute_percentage_error(real, pre)
+    r2 = r2_score(real, pre)
+    return rmse, mae, mape, r2
+
 def plot_curve(n_gap=1, n_features=4, n_train=60, n_timestamp=80):
     """
     plot curve of different methods
@@ -498,28 +581,36 @@ def plot_curve(n_gap=1, n_features=4, n_train=60, n_timestamp=80):
         # lstm_ = original[0:n_train]+lstm_
 
         plt.figure()
-        plt.plot(x, original)
+        plt.plot(x[n_train:], original[n_train:])
         # plt.plot(range(n_train, n_timestamp), la)
         # plt.plot(range(n_train, n_timestamp), ha)
-        plt.plot(range(n_train, n_timestamp), xgboost_)
-        plt.plot(range(n_train, n_timestamp), randomforest_)
+        # plt.plot(range(n_train, n_timestamp), xgboost_)
+        # plt.plot(range(n_train, n_timestamp), randomforest_)
         plt.plot(range(n_train, n_timestamp), lstm_)
         plt.xlabel('time')
         plt.ylabel('transaction value')
         # plt.legend(('original', 'LA', 'HA', 'xgboost', 'randomforest', 'GRU'))
-        plt.legend(('original', 'xgboost', 'randomforest', 'GRU'))
+        plt.legend(('original','LSTM'))
         plt.title(address[i])
         plt.show()
 
 if __name__=='__main__':
     # rmse_li = []
-    # for n_train in range(50, 75):
-    #     rmse = lstm(n_features=4, n_train=n_train, n_window=10, n_units=100, n_epochs=10, n_gap=1, with_att=False, methods="gru", feature_n=1)
+    # mae_li = []
+    # mape_li = []
+    # for n_units in [32,64,128,256]:
+    #     rmse, mae, mape, r2 = lstm(n_features=4, n_train=60, n_window=10, n_units=n_units, n_epochs=10, n_gap=1, with_att=False, methods="lstm", feature_n=1)
     #     rmse_li.append(rmse)
-    # plt.plot(range(50,75), rmse_li)
-    # plt.title("rmse")
-    # plt.xlabel("n_train")
-    # plt.ylabel("rmse")
+    #     mae_li.append(mae)
+    #     mape_li.append(mape)
+    # plt.grid(linestyle="--")  # 设置背景网格线为虚线
+    # plt.plot([32,64,128,256], rmse_li, 'o-')
+    # plt.ylim(16000,19000)
+    # # plt.legend(['RMSE', 'MAE', 'MAPE'])
+    # # plt.title("rmse")
+    # plt.xlabel("n_units")
+    # plt.ylabel("RMSE")
+    # plt.savefig('n_units.eps', dpi=600, format='eps')
     # plt.show()
 
     # rmse_lstm = lstm(n_features=4, n_train=60, n_window=10, n_units=100, n_epochs=10, n_gap=1, with_att=True, methods="gru", feature_n=1)
@@ -543,4 +634,25 @@ if __name__=='__main__':
     # xgboost()
     # randomforest()
     # la_ha()
-    lstm()
+    # lstm(with_att=False)
+    # svr(n_window=6)
+
+    # rmse_li = []
+    # mae_li = []
+    # mape_li = []
+    # for n_window in range(1, 20):
+    #     rmse, mae, mape, r2 = lstm(n_features=4, n_train=60, n_window=n_window, n_units=64, n_epochs=10, n_gap=1, with_att=False, methods="lstm", feature_n=1)
+    #     rmse_li.append(rmse)
+    #     mae_li.append(mae)
+    #     mape_li.append(mape)
+    # plt.grid(linestyle="--")  # 设置背景网格线为虚线
+    # plt.plot(range(1,20), rmse_li, 'o-')
+    # plt.ylim(14000,19000)
+    # # plt.legend(['RMSE', 'MAE', 'MAPE'])
+    # # plt.title("rmse")
+    # plt.xlabel("n_units")
+    # plt.ylabel("RMSE")
+    # plt.savefig('n_window.eps', dpi=600, format='eps')
+    # plt.show()
+
+    plot_curve()
