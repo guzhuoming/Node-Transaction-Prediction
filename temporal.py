@@ -51,7 +51,7 @@ class attention(Layer):
 
 def lstm(n_features=4,
          n_train=60,
-         n_window=10,
+         n_window=6,
          n_units=64,
          n_epochs=10,
          with_att=False,
@@ -268,7 +268,7 @@ def la_ha(n_train=60,
     print('r2_ha:{}, r2_la:{}'.format(r2_ha, r2_la))
     return rmse_ha, rmse_la, mae_ha, mae_la, mape_ha, mape_la, r2_ha, r2_la
 
-def arima(n_train=60, p=2, d=1, q=2):
+def arima(n_train=60, p=2, d=1, q=2, n_features=4, n_gap=1):
     mse = 0
     mae = 0
     mape = 0
@@ -303,7 +303,18 @@ def arima(n_train=60, p=2, d=1, q=2):
         except:
                 error = error+1
                 continue
-
+                # save predictions
+        # save data
+        data2save = {}
+        data2save['original'] = test
+        data2save['prediction'] = pred
+        print('test.len={}'.format(len(test)))
+        print('yhat.len={}'.format(len(yhat)))
+        if not os.path.exists('./data/arima_{}_{}'.format(n_features, n_gap)):
+            os.makedirs('./data/arima_{}_{}'.format(n_features, n_gap))
+        df2save = pd.DataFrame(data2save)
+        df2save.to_csv('./data/arima_{}_{}/{}_arima.csv'.format(n_features, n_gap, address[i]),
+                       index=False)
     rmse = np.sqrt(mse/(len(address)-error))
     mae = mae/(len(address)-error)
     mape = mape / (len(address) - error)
@@ -487,7 +498,7 @@ def preprocess_data_svr(values, train_size=60, time_len=80, seq_len=6, pre_len=1
         testY.append(b[seq_len: seq_len + pre_len])
     return trainX, trainY, testX, testY
 
-def svr(n_train=60, n_test=20, n_window=6):
+def svr(n_train=60, n_test=20, n_window=6, n_features=4, n_gap=1):
     """
 
     :param n_train:
@@ -534,6 +545,15 @@ def svr(n_train=60, n_test=20, n_window=6):
 
         real_transum = np.append(real_transum, values[train_size:time_len])
         predict_transum = np.append(predict_transum, pre)
+        # save predictions
+        data2save = {}
+        data2save['original'] = values[train_size:time_len]
+        data2save['prediction'] = pre
+        if not os.path.exists('./data/svr_{}_{}'.format(n_features, n_gap)):
+            os.makedirs('./data/svr_{}_{}'.format(n_features, n_gap))
+        df2save = pd.DataFrame(data2save)
+        df2save.to_csv('./data/svr_{}_{}/{}_svr.csv'.format(n_features, n_gap, address[i]),
+                       index=False)
     rmse, mae, mape, r2 = evaluation(real_transum, predict_transum)
     print('svr:')
     print('rmse={}\nmae={}\nmape={}\nr2={}'.format(rmse, mae, mape, r2))
@@ -580,21 +600,34 @@ def plot_curve(n_gap=1, n_features=4, n_train=60, n_timestamp=80):
         lstm_ = lstm_[i*n_test: i*n_test+n_test]
         # lstm_ = original[0:n_train]+lstm_
 
+        file6 = open('./data/arima_{}_{}/{}_arima.csv'.format(n_features, n_gap, address[i]))
+        df6 = pd.read_csv(file6)
+        arima_ = df6['prediction'].values.tolist()
+
+        file7 = open('./data/svr_{}_{}/{}_svr.csv'.format(n_features, n_gap, address[i]))
+        df7 = pd.read_csv(file7)
+        svr_ = df7['prediction'].values.tolist()
+
         plt.figure()
         plt.plot(x[n_train:], original[n_train:])
-        # plt.plot(range(n_train, n_timestamp), la)
-        # plt.plot(range(n_train, n_timestamp), ha)
-        # plt.plot(range(n_train, n_timestamp), xgboost_)
-        # plt.plot(range(n_train, n_timestamp), randomforest_)
-        plt.plot(range(n_train, n_timestamp), lstm_)
+        # plt.plot(x[n_train:], la)
+        plt.plot(x[n_train:], ha, '--')
+        plt.plot(x[n_train:], svr_, '--')
+        plt.plot(x[n_train:], arima_, '--')
+        plt.plot(x[n_train:], xgboost_, '--')
+        plt.plot(x[n_train:], randomforest_, '--')
+        plt.plot(x[n_train:], lstm_, '--')
         plt.xlabel('time')
         plt.ylabel('transaction value')
-        # plt.legend(('original', 'LA', 'HA', 'xgboost', 'randomforest', 'GRU'))
-        plt.legend(('original','LSTM'))
+        plt.xlim(60,80)
+        plt.legend(('Real', 'HA', 'SVR', 'ARIMA', 'XGBR', 'RF', 'LSTM'))
+        # plt.legend(('original','LSTM'))
         plt.title(address[i])
+        plt.savefig('./figure/ {}.eps'.format(address[i]), dpi=600, format='eps')
         plt.show()
 
 if __name__=='__main__':
+    # 参数敏感性分析 nunit
     # rmse_li = []
     # mae_li = []
     # mape_li = []
@@ -608,7 +641,7 @@ if __name__=='__main__':
     # plt.ylim(16000,19000)
     # # plt.legend(['RMSE', 'MAE', 'MAPE'])
     # # plt.title("rmse")
-    # plt.xlabel("n_units")
+    # plt.xlabel("Number of Hidden Units")
     # plt.ylabel("RMSE")
     # plt.savefig('n_units.eps', dpi=600, format='eps')
     # plt.show()
@@ -637,6 +670,7 @@ if __name__=='__main__':
     # lstm(with_att=False)
     # svr(n_window=6)
 
+    # 参数敏感性分析 nwindow
     # rmse_li = []
     # mae_li = []
     # mape_li = []
@@ -650,9 +684,21 @@ if __name__=='__main__':
     # plt.ylim(14000,19000)
     # # plt.legend(['RMSE', 'MAE', 'MAPE'])
     # # plt.title("rmse")
-    # plt.xlabel("n_units")
+    # plt.xlabel("Window Length")
     # plt.ylabel("RMSE")
     # plt.savefig('n_window.eps', dpi=600, format='eps')
     # plt.show()
 
-    plot_curve()
+    # plot_curve()
+
+    # 每个地址的统计特性
+    # for i in range(len(address)):
+    #     file1 = open('./data/feature_{}_{}/{}_ft.csv'.format(4, 1, address[i]))
+    #     df1 = pd.read_csv(file1)
+    #     print(address[i])
+    #     trannum = df1['tran_num']
+    #     transum = df1['tran_sum']
+    #     total_trannum = np.sum(trannum)
+    #     total_transum = np.sum(transum)
+    #     print('tran_num:{}'.format(total_trannum))
+    #     print('tran_sum:{}'.format(total_transum))
