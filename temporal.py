@@ -637,7 +637,7 @@ def plot_curve(n_gap=1, n_features=4, n_train=60, n_timestamp=80):
         plt.legend(('Real','LSTM', 'GRU', 'RNN'))
         # plt.legend(('original','LSTM'))
         plt.title(address[i])
-        plt.savefig('./figure/ {}.eps'.format(address[i]), dpi=600, format='eps')
+        plt.savefig('./figure/{}.eps'.format(address[i]), dpi=600, format='eps')
         plt.show()
 
 if __name__=='__main__':
