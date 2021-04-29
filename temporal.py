@@ -185,9 +185,9 @@ def lstm(n_features=4,
     concat = concat.reshape(concat.shape[0]*concat.shape[1], concat.shape[2])
     df = pd.DataFrame(concat)
     df.columns = ['original', 'prediction']
-    if not os.path.exists('./data/LSTM_{}_{}'.format(n_features, n_gap)):
-        os.makedirs('./data/LSTM_{}_{}'.format(n_features, n_gap))
-    df.to_csv('./data/LSTM_{}_{}/prediction_LSTM.csv'.format(n_features, n_gap), index=False)
+    if not os.path.exists('./data/{}_{}_{}'.format(methods.upper(), n_features, n_gap)):
+        os.makedirs('./data/{}_{}_{}'.format(methods.upper(), n_features, n_gap))
+    df.to_csv('./data/{}_{}_{}/prediction_{}.csv'.format(methods.upper(), n_features, n_gap, methods.upper(),), index=False)
     rmse = sqrt(mean_squared_error(df['original'].values, df['prediction'].values))
     mae = mean_absolute_error(df['original'].values, df['prediction'].values)
     mape = mean_absolute_percentage_error(df['original'].values, df['prediction'].values)
@@ -608,19 +608,33 @@ def plot_curve(n_gap=1, n_features=4, n_train=60, n_timestamp=80):
         df7 = pd.read_csv(file7)
         svr_ = df7['prediction'].values.tolist()
 
+        file8 = open('./data/GRU_{}_{}/prediction_GRU.csv'.format(n_features, n_gap, address[i]))
+        df8 = pd.read_csv(file8)
+        gru_ = df8['prediction'].values.tolist()
+        gru_ = gru_[i * n_test: i * n_test + n_test]
+
+        file9 = open('./data/RNN_{}_{}/prediction_RNN.csv'.format(n_features, n_gap, address[i]))
+        df9 = pd.read_csv(file9)
+        rnn_ = df9['prediction'].values.tolist()
+        rnn_ = rnn_[i * n_test: i * n_test + n_test]
+
+
         plt.figure()
         plt.plot(x[n_train:], original[n_train:])
         # plt.plot(x[n_train:], la)
-        plt.plot(x[n_train:], ha, '--')
-        plt.plot(x[n_train:], svr_, '--')
-        plt.plot(x[n_train:], arima_, '--')
-        plt.plot(x[n_train:], xgboost_, '--')
-        plt.plot(x[n_train:], randomforest_, '--')
+        # plt.plot(x[n_train:], ha, '--')
+        # plt.plot(x[n_train:], svr_, '--')
+        # plt.plot(x[n_train:], arima_, '--')
+        # plt.plot(x[n_train:], xgboost_, '--')
+        # plt.plot(x[n_train:], randomforest_, '--')
         plt.plot(x[n_train:], lstm_, '--')
+        plt.plot(x[n_train:], gru_, '--')
+        plt.plot(x[n_train:], rnn_, '--')
         plt.xlabel('time')
         plt.ylabel('transaction value')
         plt.xlim(60,80)
-        plt.legend(('Real', 'HA', 'SVR', 'ARIMA', 'XGBR', 'RF', 'LSTM'))
+        # plt.legend(('Real', 'HA', 'SVR', 'ARIMA', 'XGBR', 'RF', 'LSTM', 'GRU', 'RNN'))
+        plt.legend(('Real','LSTM', 'GRU', 'RNN'))
         # plt.legend(('original','LSTM'))
         plt.title(address[i])
         plt.savefig('./figure/ {}.eps'.format(address[i]), dpi=600, format='eps')
@@ -632,18 +646,18 @@ if __name__=='__main__':
     # mae_li = []
     # mape_li = []
     # for n_units in [32,64,128,256]:
-    #     rmse, mae, mape, r2 = lstm(n_features=4, n_train=60, n_window=10, n_units=n_units, n_epochs=10, n_gap=1, with_att=False, methods="lstm", feature_n=1)
+    #     rmse, mae, mape, r2 = lstm(n_features=4, n_train=60, n_window=6, n_units=n_units, n_epochs=10, n_gap=1, with_att=False, methods="rnn", feature_n=1)
     #     rmse_li.append(rmse)
     #     mae_li.append(mae)
     #     mape_li.append(mape)
     # plt.grid(linestyle="--")  # 设置背景网格线为虚线
     # plt.plot([32,64,128,256], rmse_li, 'o-')
-    # plt.ylim(16000,19000)
+    # plt.ylim(20000,26000)
     # # plt.legend(['RMSE', 'MAE', 'MAPE'])
     # # plt.title("rmse")
     # plt.xlabel("Number of Hidden Units")
     # plt.ylabel("RMSE")
-    # plt.savefig('n_units.eps', dpi=600, format='eps')
+    # plt.savefig('n_units_{}.eps'.format('rnn'), dpi=600, format='eps')
     # plt.show()
 
     # rmse_lstm = lstm(n_features=4, n_train=60, n_window=10, n_units=100, n_epochs=10, n_gap=1, with_att=True, methods="gru", feature_n=1)
@@ -675,21 +689,21 @@ if __name__=='__main__':
     # mae_li = []
     # mape_li = []
     # for n_window in range(1, 20):
-    #     rmse, mae, mape, r2 = lstm(n_features=4, n_train=60, n_window=n_window, n_units=64, n_epochs=10, n_gap=1, with_att=False, methods="lstm", feature_n=1)
+    #     rmse, mae, mape, r2 = lstm(n_features=4, n_train=60, n_window=n_window, n_units=64, n_epochs=10, n_gap=1, with_att=False, methods="rnn", feature_n=1)
     #     rmse_li.append(rmse)
     #     mae_li.append(mae)
     #     mape_li.append(mape)
     # plt.grid(linestyle="--")  # 设置背景网格线为虚线
     # plt.plot(range(1,20), rmse_li, 'o-')
-    # plt.ylim(14000,19000)
+    # plt.ylim(14000,38000)
     # # plt.legend(['RMSE', 'MAE', 'MAPE'])
     # # plt.title("rmse")
     # plt.xlabel("Window Length")
     # plt.ylabel("RMSE")
-    # plt.savefig('n_window.eps', dpi=600, format='eps')
+    # plt.savefig('n_window_{}.eps'.format('rnn'), dpi=600, format='eps')
     # plt.show()
 
-    # plot_curve()
+    plot_curve()
 
     # 每个地址的统计特性
     # for i in range(len(address)):
@@ -702,3 +716,7 @@ if __name__=='__main__':
     #     total_transum = np.sum(transum)
     #     print('tran_num:{}'.format(total_trannum))
     #     print('tran_sum:{}'.format(total_transum))
+
+    # svr()
+    # lstm(methods='gru', n_units=128)
+    # lstm(methods='rnn', n_window=2)
